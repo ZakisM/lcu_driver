@@ -1,17 +1,18 @@
-use std::path::Path;
+use std::path::PathBuf;
 
 use crate::errors::LcuDriverError;
 use crate::Result;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Lockfile {
-    pub port: usize,
+    pub path: PathBuf,
+    pub port: isize,
     pub token: String,
 }
 
 impl Lockfile {
-    pub async fn load<T: AsRef<Path>>(path: T) -> Result<Self> {
-        let data = tokio::fs::read_to_string(path).await?;
+    pub async fn load(path: PathBuf) -> Result<Self> {
+        let data = tokio::fs::read_to_string(&path).await?;
         let data_items = data.split(':').collect::<Vec<_>>();
 
         let port = data_items
@@ -25,7 +26,13 @@ impl Lockfile {
         let full_decoded = format!("riot:{}", decoded_token);
         let token = base64::encode(full_decoded);
 
-        Ok(Self { port, token })
+        let path = path.to_path_buf();
+
+        Ok(Self { path, port, token })
+    }
+
+    pub async fn exists(&self) -> bool {
+        self.path.exists()
     }
 }
 

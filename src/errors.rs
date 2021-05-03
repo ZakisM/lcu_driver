@@ -38,6 +38,7 @@ impl std::error::Error for LcuDriverError {}
 
 convert_error!(reqwest::Error);
 convert_error!(reqwest::header::InvalidHeaderValue);
+convert_error!(serde_json::Error);
 convert_error!(std::io::Error);
 convert_error!(std::string::FromUtf8Error);
 convert_error!(std::num::ParseIntError);
