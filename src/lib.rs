@@ -12,6 +12,7 @@ use crate::endpoints::perks::{PerksEndpoint, PerksInventory, PerksPage, PerksPag
 use crate::endpoints::summoner::{Summoner, SummonerEndpoint};
 use crate::endpoints::EndpointInfo;
 use crate::errors::LcuDriverError;
+use crate::models::api_error::ApiError;
 use crate::models::lcu_process::LcuProcess;
 use crate::models::lockfile::Lockfile;
 
@@ -208,6 +209,15 @@ impl LcuDriver<Initialized> {
         Ok(())
     }
 
+    pub async fn set_session_my_selection(&self, my_selection: &MySelection) -> Result<()> {
+        let my_selection = serde_json::to_string(my_selection)?;
+
+        self.get_endpoint(ChampSelectEndpoint::SessionMySelection(&my_selection).info())
+            .await?;
+
+        Ok(())
+    }
+
     pub async fn get_endpoint(&self, endpoint_info: EndpointInfo) -> Result<String> {
         let inner = self.inner.read().await;
 
@@ -233,16 +243,28 @@ impl LcuDriver<Initialized> {
             *req.body_mut() = Some(Body::from(body))
         }
 
-        Ok(inner.client.execute(req).await?.text().await?)
-    }
+        let res = inner
+            .client
+            .execute(req)
+            .await
+            .map_err(|_| LcuDriverError::FailedToSendRequest)?;
 
-    pub async fn set_session_my_selection(&self, my_selection: &MySelection) -> Result<()> {
-        let my_selection = serde_json::to_string(my_selection)?;
+        let status = res.status();
 
-        self.get_endpoint(ChampSelectEndpoint::SessionMySelection(&my_selection).info())
-            .await?;
+        let res_text = res
+            .text()
+            .await
+            .map_err(|_| LcuDriverError::FailedToReadResponse)?;
 
-        Ok(())
+        dbg!(&res_text);
+
+        if !status.is_success() {
+            let err = serde_json::from_str::<ApiError>(&res_text)?;
+
+            Err(err.into())
+        } else {
+            Ok(res_text)
+        }
     }
 
     pub async fn get_and_deserialize_endpoint<T: DeserializeOwned>(

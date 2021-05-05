@@ -2,11 +2,15 @@ use std::fmt;
 use std::fmt::Formatter;
 
 use crate::convert_error;
+use crate::models::api_error::LcuApiError;
 
 #[derive(Eq, PartialEq)]
 pub enum LcuDriverError {
     FailedToFindLeagueProcess,
     FailedToReadLockfileToken,
+    FailedToSendRequest,
+    FailedToReadResponse,
+    ApiError(LcuApiError),
     Other(String),
 }
 
@@ -15,6 +19,9 @@ impl fmt::Display for LcuDriverError {
         let message = match self {
             LcuDriverError::FailedToFindLeagueProcess => "Failed to find LeagueClientUx process",
             LcuDriverError::FailedToReadLockfileToken => "Failed to read lockfile token",
+            LcuDriverError::FailedToSendRequest => "Failed to send request to League API",
+            LcuDriverError::FailedToReadResponse => "Failed to read response text from League API",
+            LcuDriverError::ApiError(e) => return e.fmt(f),
             LcuDriverError::Other(message) => message,
         };
 

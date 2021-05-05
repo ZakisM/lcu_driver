@@ -95,7 +95,7 @@ pub struct BannedChampions {
 #[serde(rename_all = "camelCase")]
 pub struct ChatDetails {
     pub chat_room_name: String,
-    pub chat_room_password: String,
+    pub chat_room_password: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -152,7 +152,7 @@ pub enum TradeContractState {
     Accepted,
 }
 
-#[derive(Debug, Serialize, Deserialize, Default)]
+#[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MySelection {
     pub selected_skin_id: isize,
