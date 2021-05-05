@@ -8,31 +8,46 @@ pub struct Lockfile {
     pub path: PathBuf,
     pub port: isize,
     pub token: String,
+    contents: String,
 }
 
 impl Lockfile {
     pub async fn load(path: PathBuf) -> Result<Self> {
-        let data = tokio::fs::read_to_string(&path).await?;
-        let data_items = data.split(':').collect::<Vec<_>>();
+        let contents = tokio::fs::read_to_string(&path).await?;
+        let lockfile_items = contents.split(':').collect::<Vec<_>>();
 
-        let port = data_items
+        let port = lockfile_items
             .get(2)
             .ok_or(LcuDriverError::FailedToReadLockfileToken)?
             .parse()?;
 
-        let decoded_token = data_items
+        let decoded_token = lockfile_items
             .get(3)
             .ok_or(LcuDriverError::FailedToReadLockfileToken)?;
+
         let full_decoded = format!("riot:{}", decoded_token);
         let token = base64::encode(full_decoded);
 
         let path = path.to_path_buf();
 
-        Ok(Self { path, port, token })
+        Ok(Self {
+            path,
+            port,
+            token,
+            contents,
+        })
     }
 
     pub async fn exists(&self) -> bool {
         self.path.exists()
+    }
+
+    pub async fn contents_changed(&self) -> bool {
+        if let Ok(contents) = tokio::fs::read_to_string(&self.path).await {
+            self.contents != contents
+        } else {
+            false
+        }
     }
 }
 
@@ -44,7 +59,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_token() {
-        let lockfile = Lockfile::load(Path::new("./test_data/lockfile"))
+        let lockfile = Lockfile::load(Path::new("./test_data/lockfile").to_path_buf())
             .await
             .expect("Failed to load test file");
 

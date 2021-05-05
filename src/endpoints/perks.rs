@@ -7,28 +7,48 @@ const PERKS_URL: &str = "/lol-perks/v1";
 
 #[allow(unused)]
 pub enum PerksEndpoint {
+    Inventory,
     Pages(Method, Option<String>),
+    PagesId(Method, isize),
 }
 
 impl PerksEndpoint {
     pub fn info(&self) -> EndpointInfo {
         match self {
+            PerksEndpoint::Inventory => EndpointInfo {
+                url: format!("{}/inventory", PERKS_URL),
+                method: Method::GET,
+                headers: None,
+                body: None,
+            },
             PerksEndpoint::Pages(method, body) => EndpointInfo {
                 url: format!("{}/pages", PERKS_URL),
                 method: method.to_owned(),
                 headers: None,
                 body: body.to_owned(),
             },
+            PerksEndpoint::PagesId(method, id) => EndpointInfo {
+                url: format!("{}/pages/{}", PERKS_URL, id),
+                method: method.to_owned(),
+                headers: None,
+                body: None,
+            },
         }
     }
 }
 
-#[derive(Debug)]
-pub struct PerksPages {
-    pages: Vec<PerksPage>,
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PerksInventory {
+    pub owned_page_count: isize,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug)]
+pub struct PerksPages {
+    pub pages: Vec<PerksPage>,
+}
+
+#[derive(Debug, Serialize, Deserialize, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct PerksPage {
     pub auto_modified_selections: Vec<isize>,
@@ -44,6 +64,15 @@ pub struct PerksPage {
     pub primary_style_id: isize,
     pub selected_perk_ids: Vec<isize>,
     pub sub_style_id: isize,
+}
+
+impl std::cmp::PartialEq for PerksPage {
+    fn eq(&self, other: &Self) -> bool {
+        self.name == other.name
+            && self.primary_style_id == other.primary_style_id
+            && self.selected_perk_ids == other.selected_perk_ids
+            && self.sub_style_id == other.sub_style_id
+    }
 }
 
 impl Default for PerksPage {

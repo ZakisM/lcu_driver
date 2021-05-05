@@ -8,7 +8,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::endpoints::champ_select::{ChampSelectEndpoint, ChampSelectSession};
-use crate::endpoints::perks::{PerksEndpoint, PerksPage};
+use crate::endpoints::perks::{PerksEndpoint, PerksInventory, PerksPage, PerksPages};
 use crate::endpoints::summoner::{Summoner, SummonerEndpoint};
 use crate::endpoints::EndpointInfo;
 use crate::errors::LcuDriverError;
@@ -38,14 +38,12 @@ struct LcuDriverInner {
 }
 
 impl LcuDriverInner {
-    async fn replace_inner(&mut self, new_lcu_driver: Arc<LcuDriver<Initialized>>) {
-        let new_inner = new_lcu_driver.inner.read().await;
-
-        self.lcu_process = new_inner.lcu_process.clone();
-        self.lockfile = new_inner.lockfile.clone();
-        self.client = new_inner.client.clone();
-        self.api_base_url = new_inner.api_base_url.clone();
-        self.league_install_dir = new_inner.league_install_dir.clone();
+    async fn replace_inner(&mut self, new_inner: LcuDriverInner) {
+        self.lcu_process = new_inner.lcu_process;
+        self.lockfile = new_inner.lockfile;
+        self.client = new_inner.client;
+        self.api_base_url = new_inner.api_base_url;
+        self.league_install_dir = new_inner.league_install_dir;
     }
 }
 
@@ -96,18 +94,12 @@ impl LcuDriver<Uninitialized> {
         })
     }
 
-    async fn connect_wait_lockfile(watch_lockfile: bool) -> Arc<LcuDriver<Initialized>> {
+    async fn connect_wait_no_reconnect() -> LcuDriver<Initialized> {
         loop {
             if let Ok(lcu_driver) = LcuDriver::connect().await {
                 //Check that we can actually connect to the client
                 if lcu_driver.get_current_summoner().await.is_ok() {
-                    let pointer = Arc::new(lcu_driver);
-
-                    if watch_lockfile {
-                        LcuDriver::start_lockfile_watching(pointer.clone());
-                    }
-
-                    return pointer;
+                    return lcu_driver;
                 }
             }
 
@@ -116,7 +108,19 @@ impl LcuDriver<Uninitialized> {
     }
 
     pub async fn connect_wait() -> Arc<LcuDriver<Initialized>> {
-        LcuDriver::connect_wait_lockfile(true).await
+        loop {
+            if let Ok(lcu_driver) = LcuDriver::connect().await {
+                //Check that we can actually connect to the client
+                if lcu_driver.get_current_summoner().await.is_ok() {
+                    let pointer = Arc::new(lcu_driver);
+                    LcuDriver::start_lockfile_watching(pointer.clone());
+
+                    return pointer;
+                }
+            }
+
+            tokio::time::sleep(Duration::from_secs(1)).await;
+        }
     }
 }
 
@@ -124,28 +128,36 @@ impl LcuDriver<Initialized> {
     /*
         Spawn a task that will check if the lockfile has changed. If the lockfile exists but has
         new data, then it will be updated. However, if the lockfile no longer exists then any
-        calls made from the driver will block until the process is detected and the lockfile
+        calls made from the driver will block until the client process is detected and the lockfile
         exists.
     */
     fn start_lockfile_watching(lcu_driver: Arc<LcuDriver<Initialized>>) {
         tokio::task::spawn(async move {
             loop {
-                let inner = lcu_driver.inner.read().await;
+                let current_inner = lcu_driver.inner.read().await;
 
-                if !inner.lockfile.exists().await {
-                    drop(inner);
+                if !current_inner.lockfile.exists().await
+                    || current_inner.lockfile.contents_changed().await
+                {
+                    drop(current_inner);
 
-                    //hold the lock
+                    //hold the lock preventing any api calls from running
                     let mut current_lcu_driver = lcu_driver.inner.write().await;
 
-                    let new_lcu_driver = LcuDriver::connect_wait_lockfile(false).await;
+                    let new_lcu_driver = LcuDriver::connect_wait_no_reconnect().await;
 
-                    current_lcu_driver.replace_inner(new_lcu_driver).await;
+                    current_lcu_driver
+                        .replace_inner(new_lcu_driver.into_inner())
+                        .await;
                 }
 
                 tokio::time::sleep(Duration::from_secs(1)).await;
             }
         });
+    }
+
+    fn into_inner(self) -> LcuDriverInner {
+        self.inner.into_inner()
     }
 
     async fn format_url(&self, url: &str) -> String {
@@ -155,33 +167,48 @@ impl LcuDriver<Initialized> {
     }
 
     pub async fn get_current_summoner(&self) -> Result<Summoner> {
-        Ok(self.get_endpoint(SummonerEndpoint::Current.info()).await?)
+        Ok(self
+            .get_and_deserialize_endpoint(SummonerEndpoint::Current.info())
+            .await?)
     }
 
     pub async fn get_champ_select_session(&self) -> Result<ChampSelectSession> {
         Ok(self
-            .get_endpoint(ChampSelectEndpoint::Session.info())
+            .get_and_deserialize_endpoint(ChampSelectEndpoint::Session.info())
             .await?)
     }
 
-    pub async fn get_perks_pages(&self) -> Result<PerksPage> {
+    pub async fn get_perks_inventory(&self) -> Result<PerksInventory> {
         Ok(self
-            .get_endpoint(PerksEndpoint::Pages(Method::GET, None).info())
+            .get_and_deserialize_endpoint(PerksEndpoint::Inventory.info())
             .await?)
+    }
+
+    pub async fn get_perks_pages(&self) -> Result<PerksPages> {
+        let pages = self
+            .get_and_deserialize_endpoint(PerksEndpoint::Pages(Method::GET, None).info())
+            .await?;
+
+        Ok(PerksPages { pages })
     }
 
     pub async fn set_perks_page(&self, perks_page: &PerksPage) -> Result<()> {
         let perks_page = serde_json::to_string(perks_page)?;
 
-        Ok(self
-            .get_endpoint(PerksEndpoint::Pages(Method::POST, Some(perks_page)).info())
-            .await?)
+        self.get_endpoint(PerksEndpoint::Pages(Method::POST, Some(perks_page)).info())
+            .await?;
+
+        Ok(())
     }
 
-    pub async fn get_endpoint<T: DeserializeOwned>(
-        &self,
-        endpoint_info: EndpointInfo,
-    ) -> Result<T> {
+    pub async fn delete_perks_page(&self, page_id: isize) -> Result<()> {
+        self.get_endpoint(PerksEndpoint::PagesId(Method::DELETE, page_id).info())
+            .await?;
+
+        Ok(())
+    }
+
+    pub async fn get_endpoint(&self, endpoint_info: EndpointInfo) -> Result<String> {
         let inner = self.inner.read().await;
 
         let mut req = Request::new(
@@ -206,9 +233,14 @@ impl LcuDriver<Initialized> {
             *req.body_mut() = Some(Body::from(body))
         }
 
-        let res = inner.client.execute(req).await?.text().await?;
+        Ok(inner.client.execute(req).await?.text().await?)
+    }
 
-        dbg!(&res);
+    pub async fn get_and_deserialize_endpoint<T: DeserializeOwned>(
+        &self,
+        endpoint_info: EndpointInfo,
+    ) -> Result<T> {
+        let res = self.get_endpoint(endpoint_info).await?;
 
         Ok(serde_json::from_str::<T>(&res)?)
     }

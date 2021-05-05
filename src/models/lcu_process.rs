@@ -89,7 +89,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_spawn_fail() {
-        let process = LcuProcess::spawn().await;
+        let process = LcuProcess::locate().await;
 
         assert_eq!(process, Err(LcuDriverError::FailedToFindLeagueProcess))
     }
