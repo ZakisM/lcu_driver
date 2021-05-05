@@ -8,7 +8,6 @@ pub struct LcuProcess {
     output: String,
 }
 
-#[cfg(windows)]
 impl LcuProcess {
     #[cfg(windows)]
     pub async fn locate() -> Result<Self> {

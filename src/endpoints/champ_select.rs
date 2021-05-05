@@ -6,11 +6,12 @@ use crate::endpoints::EndpointInfo;
 const CHAMP_SELECT_URL: &str = "/lol-champ-select/v1";
 
 #[allow(unused)]
-pub enum ChampSelectEndpoint {
+pub enum ChampSelectEndpoint<'a> {
     Session,
+    SessionMySelection(&'a str),
 }
 
-impl ChampSelectEndpoint {
+impl<'a> ChampSelectEndpoint<'a> {
     pub fn info(&self) -> EndpointInfo {
         match self {
             ChampSelectEndpoint::Session => EndpointInfo {
@@ -18,6 +19,12 @@ impl ChampSelectEndpoint {
                 method: Method::GET,
                 headers: None,
                 body: None,
+            },
+            ChampSelectEndpoint::SessionMySelection(body) => EndpointInfo {
+                url: format!("{}/session/my-selection", CHAMP_SELECT_URL),
+                method: Method::PATCH,
+                headers: None,
+                body: Some(body.to_string()),
             },
         }
     }
@@ -143,4 +150,13 @@ pub enum TradeContractState {
     Declined,
     Cancelled,
     Accepted,
+}
+
+#[derive(Debug, Serialize, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct MySelection {
+    pub selected_skin_id: isize,
+    pub spell_1_id: isize,
+    pub spell_2_id: isize,
+    pub ward_skin_id: isize,
 }

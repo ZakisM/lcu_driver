@@ -7,7 +7,7 @@ use reqwest::{Body, Client, ClientBuilder, Method, Request};
 use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
-use crate::endpoints::champ_select::{ChampSelectEndpoint, ChampSelectSession};
+use crate::endpoints::champ_select::{ChampSelectEndpoint, ChampSelectSession, MySelection};
 use crate::endpoints::perks::{PerksEndpoint, PerksInventory, PerksPage, PerksPages};
 use crate::endpoints::summoner::{Summoner, SummonerEndpoint};
 use crate::endpoints::EndpointInfo;
@@ -234,6 +234,15 @@ impl LcuDriver<Initialized> {
         }
 
         Ok(inner.client.execute(req).await?.text().await?)
+    }
+
+    pub async fn set_session_my_selection(&self, my_selection: &MySelection) -> Result<()> {
+        let my_selection = serde_json::to_string(my_selection)?;
+
+        self.get_endpoint(ChampSelectEndpoint::SessionMySelection(&my_selection).info())
+            .await?;
+
+        Ok(())
     }
 
     pub async fn get_and_deserialize_endpoint<T: DeserializeOwned>(
