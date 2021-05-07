@@ -8,6 +8,7 @@ use serde::de::DeserializeOwned;
 use tokio::sync::RwLock;
 
 use crate::endpoints::champ_select::{ChampSelectEndpoint, ChampSelectSession, MySelection};
+use crate::endpoints::gameflow::{GameFlowEndpoint, GameFlowSession};
 use crate::endpoints::perks::{PerksEndpoint, PerksInventory, PerksPage, PerksPages};
 use crate::endpoints::summoner::{Summoner, SummonerEndpoint};
 use crate::endpoints::EndpointInfo;
@@ -176,6 +177,12 @@ impl LcuDriver<Initialized> {
     pub async fn get_champ_select_session(&self) -> Result<ChampSelectSession> {
         Ok(self
             .get_and_deserialize_endpoint(ChampSelectEndpoint::Session.info())
+            .await?)
+    }
+
+    pub async fn get_gameflow_session(&self) -> Result<GameFlowSession> {
+        Ok(self
+            .get_and_deserialize_endpoint(GameFlowEndpoint::Session.info())
             .await?)
     }
 

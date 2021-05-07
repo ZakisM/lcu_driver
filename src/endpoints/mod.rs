@@ -2,6 +2,7 @@ use reqwest::header::HeaderMap;
 use reqwest::Method;
 
 pub mod champ_select;
+pub mod gameflow;
 pub mod perks;
 pub mod summoner;
 

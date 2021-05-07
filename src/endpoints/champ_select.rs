@@ -94,7 +94,7 @@ pub struct BannedChampions {
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatDetails {
-    pub chat_room_name: String,
+    pub chat_room_name: Option<String>,
     pub chat_room_password: Option<String>,
 }
 
