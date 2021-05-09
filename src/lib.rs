@@ -1,11 +1,18 @@
+use std::io::Cursor;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
 use reqwest::{Body, Client, ClientBuilder, Method, Request};
+use rustls::ClientConfig;
 use serde::de::DeserializeOwned;
+use tokio::net::TcpStream;
 use tokio::sync::RwLock;
+use tokio_tungstenite::tungstenite::client::IntoClientRequest;
+use tokio_tungstenite::tungstenite::http::Response;
+use tokio_tungstenite::{MaybeTlsStream, WebSocketStream};
 
 use crate::endpoints::champ_select::{ChampSelectEndpoint, ChampSelectSession, MySelection};
 use crate::endpoints::gameflow::{GameFlowEndpoint, GameFlowSession};
@@ -35,7 +42,9 @@ struct LcuDriverInner {
     lcu_process: LcuProcess,
     lockfile: Lockfile,
     client: Client,
-    api_base_url: String,
+    default_req_headers: HeaderMap,
+    api_base_url: url::Url,
+    websocket_base_url: url::Url,
     league_install_dir: PathBuf,
 }
 
@@ -49,14 +58,24 @@ impl LcuDriverInner {
     }
 }
 
-#[derive(Debug)]
 pub struct LcuDriver<S> {
     inner: RwLock<LcuDriverInner>,
     _state: S,
+    rustls_config: Arc<ClientConfig>,
 }
 
 impl LcuDriver<Uninitialized> {
     pub async fn connect() -> Result<LcuDriver<Initialized>> {
+        let mut rustls_config = ClientConfig::new();
+
+        let cert_raw = include_bytes!("../certs/riotgames.pem");
+        let mut cert = Cursor::new(&cert_raw);
+
+        rustls_config
+            .root_store
+            .add_pem_file(&mut cert)
+            .map_err(|_| LcuDriverError::FailedToReadCertificate)?;
+
         let lcu_process = LcuProcess::locate().await?;
 
         let league_install_dir = Path::new(
@@ -76,22 +95,27 @@ impl LcuDriver<Uninitialized> {
         );
 
         let client = ClientBuilder::new()
-            .default_headers(headers)
+            .default_headers(headers.clone())
             .danger_accept_invalid_certs(true)
             .build()?;
 
-        let api_base_url = format!("https://127.0.0.1:{}", lockfile.port);
+        let api_base_url = url::Url::parse(&format!("https://127.0.0.1:{}", lockfile.port))?;
+
+        let websocket_base_url = url::Url::parse(&format!("wss://localhost:{}/", lockfile.port))?;
 
         let inner_instance = LcuDriverInner {
             lcu_process,
             lockfile,
             client,
+            default_req_headers: headers,
             api_base_url,
+            websocket_base_url,
             league_install_dir,
         };
 
         Ok(LcuDriver {
             inner: RwLock::new(inner_instance),
+            rustls_config: Arc::new(rustls_config),
             _state: Initialized {},
         })
     }
@@ -162,10 +186,60 @@ impl LcuDriver<Initialized> {
         self.inner.into_inner()
     }
 
-    async fn format_url(&self, url: &str) -> String {
+    async fn format_url(&self, url: &str) -> Result<url::Url> {
         let inner = self.inner.read().await;
 
-        format!("{}{}", inner.api_base_url, url)
+        Ok(inner.api_base_url.join(url)?)
+    }
+
+    pub async fn connect_websocket(&self) -> Result<()> {
+        let (ws_stream, e) = self.connect_websocket_with_certs().await?;
+
+        dbg!(&e);
+
+        Ok(())
+    }
+
+    async fn connect_websocket_with_certs(
+        &self,
+    ) -> Result<(WebSocketStream<MaybeTlsStream<TcpStream>>, Response<()>)> {
+        let inner = self.inner.read().await;
+
+        let connector = tokio_tungstenite::Connector::Rustls(self.rustls_config.clone());
+
+        let uri = http::Uri::from_str(inner.websocket_base_url.as_str())?;
+
+        let mut ws_req = http::Request::builder().uri(&uri).body(())?;
+
+        *ws_req.headers_mut() = inner.default_req_headers.clone();
+
+        let request = ws_req.into_client_request()?;
+
+        let port = request
+            .uri()
+            .port_u16()
+            .or_else(|| match request.uri().scheme_str() {
+                Some("wss") => Some(443),
+                Some("ws") => Some(80),
+                _ => None,
+            })
+            .expect("Failed to read websocket port");
+
+        let domain = request
+            .uri()
+            .host()
+            .map(|d| d.to_string())
+            .expect("Failed to read websocket domain");
+
+        let addr = format!("{}:{}", domain, port);
+
+        let socket = tokio::net::TcpStream::connect(addr).await?;
+
+        let websocket =
+            tokio_tungstenite::client_async_tls_with_config(request, socket, None, Some(connector))
+                .await?;
+
+        Ok(websocket)
     }
 
     pub async fn get_current_summoner(&self) -> Result<Summoner> {
@@ -232,7 +306,6 @@ impl LcuDriver<Initialized> {
             endpoint_info.method,
             self.format_url(&endpoint_info.url)
                 .await
-                .parse()
                 .expect("Invalid URL"),
         );
 
@@ -254,15 +327,16 @@ impl LcuDriver<Initialized> {
             .client
             .execute(req)
             .await
-            .map_err(|_| LcuDriverError::FailedToSendRequest)?;
+            .map_err(|e| LcuDriverError::FailedToSendRequest(e.to_string()))?;
 
         let status = res.status();
 
         let res_text = res
             .text()
             .await
-            .map_err(|_| LcuDriverError::FailedToReadResponse)?;
+            .map_err(|e| LcuDriverError::FailedToReadResponse(e.to_string()))?;
 
+        dbg!(&status);
         dbg!(&res_text);
 
         if !status.is_success() {

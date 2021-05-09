@@ -8,8 +8,9 @@ use crate::models::api_error::LcuApiError;
 pub enum LcuDriverError {
     FailedToFindLeagueProcess,
     FailedToReadLockfileToken,
-    FailedToSendRequest,
-    FailedToReadResponse,
+    FailedToSendRequest(String),
+    FailedToReadResponse(String),
+    FailedToReadCertificate,
     ApiError(LcuApiError),
     Other(String),
 }
@@ -19,8 +20,13 @@ impl fmt::Display for LcuDriverError {
         let message = match self {
             LcuDriverError::FailedToFindLeagueProcess => "Failed to find LeagueClientUx process",
             LcuDriverError::FailedToReadLockfileToken => "Failed to read lockfile token",
-            LcuDriverError::FailedToSendRequest => "Failed to send request to League API",
-            LcuDriverError::FailedToReadResponse => "Failed to read response text from League API",
+            LcuDriverError::FailedToSendRequest(e) => {
+                return write!(f, "Failed to send request to League API - {}", e);
+            }
+            LcuDriverError::FailedToReadResponse(e) => {
+                return write!(f, "Failed to read response text from League API - {}", e);
+            }
+            LcuDriverError::FailedToReadCertificate => "Failed to read riot certificate file",
             LcuDriverError::ApiError(e) => return e.fmt(f),
             LcuDriverError::Other(message) => message,
         };
@@ -49,6 +55,10 @@ convert_error!(serde_json::Error);
 convert_error!(std::io::Error);
 convert_error!(std::string::FromUtf8Error);
 convert_error!(std::num::ParseIntError);
+convert_error!(tokio_tungstenite::tungstenite::Error);
+convert_error!(url::ParseError);
+convert_error!(http::uri::InvalidUri);
+convert_error!(http::Error);
 
 #[macro_export]
 macro_rules! convert_error {
