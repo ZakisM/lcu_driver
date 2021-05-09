@@ -178,16 +178,17 @@ pub struct Map {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "UPPERCASE")]
 pub enum GameMode {
     Classic,
     Aram,
+    PracticeTool,
 }
 
 impl GameMode {
     pub fn disallowed_summoner_spells(&self) -> Option<Vec<isize>> {
         match self {
-            GameMode::Classic => None,
+            GameMode::Classic | GameMode::PracticeTool => None,
             GameMode::Aram => Some(vec![11, 12]),
         }
     }

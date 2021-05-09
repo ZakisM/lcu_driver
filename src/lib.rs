@@ -1,5 +1,5 @@
 use std::io::Cursor;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use std::str::FromStr;
 use std::sync::Arc;
 use std::time::Duration;
@@ -45,7 +45,6 @@ struct LcuDriverInner {
     default_req_headers: HeaderMap,
     api_base_url: url::Url,
     websocket_base_url: url::Url,
-    league_install_dir: PathBuf,
 }
 
 impl LcuDriverInner {
@@ -54,7 +53,6 @@ impl LcuDriverInner {
         self.lockfile = new_inner.lockfile;
         self.client = new_inner.client;
         self.api_base_url = new_inner.api_base_url;
-        self.league_install_dir = new_inner.league_install_dir;
     }
 }
 
@@ -78,12 +76,7 @@ impl LcuDriver<Uninitialized> {
 
         let lcu_process = LcuProcess::locate().await?;
 
-        let league_install_dir = Path::new(
-            lcu_process
-                .get_argument_value("install-directory=")
-                .ok_or_else(|| LcuDriverError::new("Failed to find League install directory"))?,
-        )
-        .to_path_buf();
+        let league_install_dir = lcu_process.install_directory();
 
         let lockfile = Lockfile::load(league_install_dir.join("lockfile")).await?;
 
@@ -110,7 +103,6 @@ impl LcuDriver<Uninitialized> {
             default_req_headers: headers,
             api_base_url,
             websocket_base_url,
-            league_install_dir,
         };
 
         Ok(LcuDriver {
@@ -194,8 +186,6 @@ impl LcuDriver<Initialized> {
 
     pub async fn connect_websocket(&self) -> Result<()> {
         let (ws_stream, e) = self.connect_websocket_with_certs().await?;
-
-        dbg!(&e);
 
         Ok(())
     }
@@ -336,9 +326,6 @@ impl LcuDriver<Initialized> {
             .await
             .map_err(|e| LcuDriverError::FailedToReadResponse(e.to_string()))?;
 
-        dbg!(&status);
-        dbg!(&res_text);
-
         if !status.is_success() {
             let err = serde_json::from_str::<ApiError>(&res_text)?;
 
@@ -360,6 +347,6 @@ impl LcuDriver<Initialized> {
     pub async fn league_install_dir(&self) -> PathBuf {
         let inner = self.inner.read().await;
 
-        inner.league_install_dir.clone()
+        inner.lcu_process.install_directory().to_path_buf()
     }
 }

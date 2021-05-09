@@ -1,3 +1,5 @@
+use std::path::{Path, PathBuf};
+
 use tokio::process::Command;
 
 use crate::errors::LcuDriverError;
@@ -6,9 +8,59 @@ use crate::Result;
 #[derive(Debug, Eq, PartialEq, Clone)]
 pub struct LcuProcess {
     output: String,
+    install_directory: PathBuf,
 }
 
 impl LcuProcess {
+    fn new(output: String) -> Result<Self> {
+        let install_directory = PathBuf::from(
+            Self::argument_value(&output, "install-directory=")
+                .ok_or(LcuDriverError::FailedToFindLeagueProcess)?,
+        );
+
+        Ok(Self {
+            output,
+            install_directory,
+        })
+    }
+
+    // currently only detects league installed through lutris
+    #[cfg(target_os = "linux")]
+    async fn new_lutris(output: String) -> Result<Self> {
+        let mut process = Self::new(output)?;
+
+        let lutris_command = Command::new("lutris").arg("-l").output().await?;
+
+        if !lutris_command.status.success() {
+            return Err(LcuDriverError::FailedToFindLutrisPrefix);
+        }
+
+        let lutris_output = String::from_utf8(lutris_command.stdout.to_vec())?;
+
+        let lutris_prefix = lutris_output
+            .split('|')
+            .last()
+            .map(|s| s.trim())
+            .ok_or(LcuDriverError::FailedToFindLutrisPrefix)?;
+
+        let wine_install_dir = process
+            .install_directory
+            .to_str()
+            .map(|s| s.replace("\\", "/"))
+            .map(|s| s.replace("C:/", "drive_c/"))
+            .ok_or(LcuDriverError::FailedToFindLutrisPrefix)?;
+
+        let lutris_install_directory = PathBuf::from(lutris_prefix).join(wine_install_dir);
+
+        if lutris_install_directory.exists() {
+            process.install_directory = lutris_install_directory;
+
+            Ok(process)
+        } else {
+            Err(LcuDriverError::FailedToFindLutrisPrefix)
+        }
+    }
+
     #[cfg(windows)]
     pub async fn locate() -> Result<Self> {
         let command = Command::new("cmd")
@@ -41,11 +93,9 @@ impl LcuProcess {
             .collect::<Vec<_>>()
             .join(" ");
 
-        if output.contains("--install-directory=") {
-            Ok(Self { output })
-        } else {
-            Err(LcuDriverError::FailedToFindLeagueProcess)
-        }
+        let process = Self::new(output)?;
+
+        Ok(process)
     }
 
     #[cfg(not(windows))]
@@ -70,21 +120,36 @@ impl LcuProcess {
             .ok_or(LcuDriverError::FailedToFindLeagueProcess)?
             .to_owned();
 
-        Ok(Self { output })
+        #[cfg(not(target_os = "linux"))]
+        let process =
+            Self::new(output).expect("Should never fail to find league install directory");
+
+        #[cfg(target_os = "linux")]
+        let process = Self::new_lutris(output)
+            .await
+            .expect("Should never fail to find league install directory");
+
+        Ok(process)
+    }
+
+    pub fn install_directory(&self) -> &Path {
+        &self.install_directory
+    }
+
+    fn argument_value<'a>(data: &'a str, argument: &str) -> Option<&'a str> {
+        data.split(" --")
+            .find(|l| l.starts_with(argument))
+            .map(|l| l.trim_start_matches(argument))
     }
 
     pub fn get_argument_value(&self, argument: &str) -> Option<&str> {
-        self.output
-            .split(" --")
-            .find(|l| l.starts_with(argument))
-            .map(|l| l.trim_start_matches(argument))
+        Self::argument_value(&self.output, argument)
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use crate::errors::LcuDriverError;
-    use crate::models::lcu_process::LcuProcess;
+    use super::*;
 
     #[tokio::test]
     async fn test_spawn_fail() {
@@ -97,6 +162,7 @@ mod tests {
     fn get_argument_value_is_none() {
         let league_process = LcuProcess {
             output: "".to_owned(),
+            install_directory: PathBuf::new(),
         };
 
         assert_eq!(
@@ -108,12 +174,13 @@ mod tests {
     #[test]
     fn get_argument_value_is_some() {
         let league_process = LcuProcess {
-            output: r#""C:/Riot Games/League of Legends/LeagueClientUx.exe" --no-rads --disable-self-update --region=EUW --locale=en_GB --respawn-command=LeagueClient.exe --no-proxy-server --install-directory=C:\Riot Games\League of Legends"#.to_owned()
+            output: r#""C:/Riot Games/League of Legends/LeagueClientUx.exe" --no-rads --disable-self-update --region=EUW --locale=en_GB --respawn-command=LeagueClient.exe --no-proxy-server --install-directory=C:\Riot Games\League of Legends"#.to_owned(),
+            install_directory: PathBuf::new(),
         };
 
         assert_eq!(
-            league_process.get_argument_value("install-directory="),
-            Some("C:\\Riot Games\\League of Legends")
+            league_process.install_directory(),
+            Path::new("C:\\Riot Games\\League of Legends")
         );
     }
 }

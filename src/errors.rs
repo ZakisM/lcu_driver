@@ -11,6 +11,7 @@ pub enum LcuDriverError {
     FailedToSendRequest(String),
     FailedToReadResponse(String),
     FailedToReadCertificate,
+    FailedToFindLutrisPrefix,
     ApiError(LcuApiError),
     Other(String),
 }
@@ -27,6 +28,7 @@ impl fmt::Display for LcuDriverError {
                 return write!(f, "Failed to read response text from League API - {}", e);
             }
             LcuDriverError::FailedToReadCertificate => "Failed to read riot certificate file",
+            LcuDriverError::FailedToFindLutrisPrefix => "Failed to find lutris prefix",
             LcuDriverError::ApiError(e) => return e.fmt(f),
             LcuDriverError::Other(message) => message,
         };
@@ -59,6 +61,7 @@ convert_error!(tokio_tungstenite::tungstenite::Error);
 convert_error!(url::ParseError);
 convert_error!(http::uri::InvalidUri);
 convert_error!(http::Error);
+convert_error!(std::path::StripPrefixError);
 
 #[macro_export]
 macro_rules! convert_error {
