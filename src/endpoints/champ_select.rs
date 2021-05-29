@@ -70,7 +70,7 @@ pub struct Action {
     pub id: isize,
     pub is_ally_action: bool,
     pub is_in_progress: bool,
-    pub pick_turn: isize,
+    pub pick_turn: Option<isize>,
     #[serde(rename = "type")]
     pub type_field: String,
 }
