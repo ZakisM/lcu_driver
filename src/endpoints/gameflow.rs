@@ -161,6 +161,7 @@ pub struct Map {
     pub assets: Assets,
     pub categorized_content_bundles: CategorizedContentBundles,
     pub description: String,
+    #[serde(default)]
     pub game_mode: GameMode,
     pub game_mode_name: String,
     pub game_mode_short_name: String,
@@ -183,12 +184,24 @@ pub enum GameMode {
     Classic,
     Aram,
     PracticeTool,
+    NexusBlitz,
+    #[serde(other)]
+    Unknown,
+}
+
+impl std::default::Default for GameMode {
+    fn default() -> Self {
+        Self::Unknown
+    }
 }
 
 impl GameMode {
     pub fn disallowed_summoner_spells(&self) -> Option<Vec<isize>> {
         match self {
-            GameMode::Classic | GameMode::PracticeTool => None,
+            GameMode::Classic
+            | GameMode::PracticeTool
+            | GameMode::NexusBlitz
+            | GameMode::Unknown => None,
             GameMode::Aram => Some(vec![11, 12]),
         }
     }
