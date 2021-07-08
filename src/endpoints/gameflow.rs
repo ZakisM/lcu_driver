@@ -198,11 +198,9 @@ impl std::default::Default for GameMode {
 impl GameMode {
     pub fn disallowed_summoner_spells(&self) -> Option<Vec<isize>> {
         match self {
-            GameMode::Classic
-            | GameMode::PracticeTool
-            | GameMode::NexusBlitz
-            | GameMode::Unknown => None,
+            GameMode::Classic | GameMode::PracticeTool | GameMode::NexusBlitz => None,
             GameMode::Aram => Some(vec![11, 12]),
+            GameMode::Unknown => Some(vec![]),
         }
     }
 }
