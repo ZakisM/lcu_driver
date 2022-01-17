@@ -61,7 +61,7 @@ impl LcuProcess {
         }
     }
 
-    #[cfg(windows)]
+    #[cfg(target_os = "windows")]
     pub async fn locate() -> Result<Self> {
         let command = Command::new("cmd")
             .arg("/c")
@@ -98,7 +98,7 @@ impl LcuProcess {
         Ok(process)
     }
 
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
     pub async fn locate() -> Result<Self> {
         let command = Command::new("ps")
             .arg("x")

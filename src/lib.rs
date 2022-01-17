@@ -5,8 +5,8 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
-use reqwest::{Body, Client, ClientBuilder, Method, Request};
-use rustls::ClientConfig;
+use reqwest::{Body, Certificate as ReqwestCertificate, Client, ClientBuilder, Method, Request};
+use rustls::{Certificate, ClientConfig, RootCertStore};
 use serde::de::DeserializeOwned;
 use tokio::net::TcpStream;
 use tokio::sync::RwLock;
@@ -64,15 +64,33 @@ pub struct LcuDriver<S> {
 
 impl LcuDriver<Uninitialized> {
     pub async fn connect() -> Result<LcuDriver<Initialized>> {
-        let mut rustls_config = ClientConfig::new();
-
         let cert_raw = include_bytes!("../certs/riotgames.pem");
-        let mut cert = Cursor::new(&cert_raw);
+        let reqwest_cert = ReqwestCertificate::from_pem(cert_raw)?;
 
-        rustls_config
-            .root_store
-            .add_pem_file(&mut cert)
-            .map_err(|_| LcuDriverError::FailedToReadCertificate)?;
+        let mut cert_raw_cursor = Cursor::new(cert_raw);
+        let rustls_cert_raw = rustls_pemfile::read_one(&mut cert_raw_cursor)?;
+
+        let rustls_cert_raw_bytes = match rustls_cert_raw {
+            Some(rustls_pemfile::Item::X509Certificate(bytes)) => bytes,
+            _ => {
+                eprintln!("Did not receive a valid X509Certificate.");
+                return Err(LcuDriverError::FailedToReadCertificate);
+            }
+        };
+
+        let rustls_cert = Certificate(rustls_cert_raw_bytes);
+
+        let mut root_store = RootCertStore::empty();
+        root_store.add(&rustls_cert).map_err(|e| {
+            eprintln!("{}", e);
+
+            LcuDriverError::FailedToReadCertificate
+        })?;
+
+        let rustls_config = ClientConfig::builder()
+            .with_safe_defaults()
+            .with_root_certificates(root_store)
+            .with_no_client_auth();
 
         let lcu_process = LcuProcess::locate().await?;
 
@@ -89,7 +107,7 @@ impl LcuDriver<Uninitialized> {
 
         let client = ClientBuilder::new()
             .default_headers(headers.clone())
-            .danger_accept_invalid_certs(true)
+            .add_root_certificate(reqwest_cert)
             .build()?;
 
         let api_base_url = url::Url::parse(&format!("https://127.0.0.1:{}", lockfile.port))?;
