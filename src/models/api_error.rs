@@ -16,7 +16,6 @@ pub enum LcuApiError {
 pub struct ApiError {
     pub error_code: String,
     pub http_status: i64,
-    pub implementation_details: ImplementationDetails,
     pub message: String,
 }
 
@@ -25,10 +24,6 @@ impl std::fmt::Display for ApiError {
         write!(f, "{}", self.message)
     }
 }
-
-#[derive(Default, Debug, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ImplementationDetails {}
 
 impl From<ApiError> for LcuDriverError {
     fn from(api_err: ApiError) -> Self {

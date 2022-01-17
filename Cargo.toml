@@ -2,22 +2,18 @@
 name = "lcu_driver"
 version = "0.1.0"
 authors = ["Zak <zakmikellides@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
 tokio = { version = "1", features = ["rt", "macros", "process", "fs"] }
-rustls = "0.19"
-tokio-tungstenite = { version = "0.14", features = ["rustls-tls"] }
+rustls = "0.20"
+rustls-pemfile = "0.2"
+tokio-tungstenite = { version = "0.16", features = ["__rustls-tls"] }
 url = "2.2"
 http = "0.2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 reqwest = { version = "0.11", features = ["rustls-tls"] }
 base64 = "0.13"
-
-[profile.dev]
-split-debuginfo = "unpacked"
-[profile.test]
-split-debuginfo = "unpacked"

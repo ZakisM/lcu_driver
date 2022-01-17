@@ -156,7 +156,28 @@ pub enum TradeContractState {
 #[serde(rename_all = "camelCase")]
 pub struct MySelection {
     pub selected_skin_id: isize,
-    pub spell_1_id: isize,
-    pub spell_2_id: isize,
+    pub spell1_id: isize,
+    pub spell2_id: isize,
     pub ward_skin_id: isize,
+}
+
+impl From<&PlayerSelection> for MySelection {
+    fn from(ps: &PlayerSelection) -> Self {
+        Self {
+            selected_skin_id: ps.selected_skin_id,
+            spell1_id: ps.spell1_id,
+            spell2_id: ps.spell2_id,
+            ward_skin_id: ps.ward_skin_id,
+        }
+    }
+}
+
+impl MySelection {
+    pub fn set_flash_first(&mut self) {
+        // A spell with ID of 4 == Flash
+        if self.spell1_id != 4 && self.spell2_id == 4 {
+            self.spell2_id = self.spell1_id;
+            self.spell1_id = 4;
+        }
+    }
 }
