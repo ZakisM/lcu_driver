@@ -108,6 +108,8 @@ impl LcuDriver<Uninitialized> {
         let client = ClientBuilder::new()
             .default_headers(headers.clone())
             .add_root_certificate(reqwest_cert)
+            .connect_timeout(Duration::from_secs(5))
+            .timeout(Duration::from_secs(5))
             .build()?;
 
         let api_base_url = url::Url::parse(&format!("https://127.0.0.1:{}", lockfile.port))?;
