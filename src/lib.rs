@@ -251,27 +251,23 @@ impl LcuDriver<Initialized> {
     }
 
     pub async fn get_current_summoner(&self) -> Result<Summoner> {
-        Ok(self
-            .get_and_deserialize_endpoint(SummonerEndpoint::Current.info())
-            .await?)
+        self.get_and_deserialize_endpoint(SummonerEndpoint::Current.info())
+            .await
     }
 
     pub async fn get_champ_select_session(&self) -> Result<ChampSelectSession> {
-        Ok(self
-            .get_and_deserialize_endpoint(ChampSelectEndpoint::Session.info())
-            .await?)
+        self.get_and_deserialize_endpoint(ChampSelectEndpoint::Session.info())
+            .await
     }
 
     pub async fn get_gameflow_session(&self) -> Result<GameFlowSession> {
-        Ok(self
-            .get_and_deserialize_endpoint(GameFlowEndpoint::Session.info())
-            .await?)
+        self.get_and_deserialize_endpoint(GameFlowEndpoint::Session.info())
+            .await
     }
 
     pub async fn get_perks_inventory(&self) -> Result<PerksInventory> {
-        Ok(self
-            .get_and_deserialize_endpoint(PerksEndpoint::Inventory.info())
-            .await?)
+        self.get_and_deserialize_endpoint(PerksEndpoint::Inventory.info())
+            .await
     }
 
     pub async fn get_perks_pages(&self) -> Result<PerksPages> {

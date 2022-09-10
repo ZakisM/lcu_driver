@@ -9,8 +9,8 @@ edition = "2021"
 [dependencies]
 tokio = { version = "1", features = ["rt", "macros", "process", "fs"] }
 rustls = "0.20"
-rustls-pemfile = "0.2"
-tokio-tungstenite = { version = "0.16", features = ["__rustls-tls"] }
+rustls-pemfile = "1.0"
+tokio-tungstenite = { version = "0.17", features = ["__rustls-tls"] }
 url = "2.2"
 http = "0.2"
 serde = { version = "1", features = ["derive"] }
