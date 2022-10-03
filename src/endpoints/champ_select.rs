@@ -40,7 +40,7 @@ pub struct ChampSelectSession {
     pub allow_rerolling: bool,
     pub allow_skin_selection: bool,
     pub bans: Bans,
-    pub bench_champion_ids: Vec<isize>,
+    pub bench_champion_ids: Option<Vec<isize>>,
     pub bench_enabled: bool,
     pub boostable_skin_count: isize,
     pub chat_details: ChatDetails,
