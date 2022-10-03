@@ -84,7 +84,7 @@ impl LcuProcess {
             .find("\r\r\n\"")
             .ok_or(LcuDriverError::FailedToFindLeagueProcess)?;
 
-        let output_untrimmed = (&all_output[output_start..]).trim().to_owned();
+        let output_untrimmed = &all_output[output_start..].trim().to_owned();
 
         let output = output_untrimmed
             .split(' ')
