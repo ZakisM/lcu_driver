@@ -63,14 +63,16 @@ impl LcuProcess {
 
     #[cfg(target_os = "windows")]
     pub async fn locate() -> Result<Self> {
-        let command = Command::new("cmd")
-            .arg("/c")
-            .arg("WMIC")
-            .arg("PROCESS")
-            .arg("WHERE")
-            .arg("name='LeagueClientUx.exe'")
-            .arg("GET")
-            .arg("commandline")
+        let command = Command::new("powershell")
+            .arg("Get-CimInstance")
+            .arg("-Class")
+            .arg("Win32_Process")
+            .arg("-Filter")
+            .arg(r#""Name = 'LeagueClientUx.exe'""#)
+            .arg("|")
+            .arg("Select-Object")
+            .arg("-ExpandProperty")
+            .arg("CommandLine")
             .output()
             .await?;
 
@@ -78,18 +80,8 @@ impl LcuProcess {
             return Err(LcuDriverError::FailedToFindLeagueProcess);
         }
 
-        let all_output = String::from_utf8(command.stdout.to_vec())?;
-
-        let output_start = all_output
-            .find("\r\r\n\"")
-            .ok_or(LcuDriverError::FailedToFindLeagueProcess)?;
-
-        let output_untrimmed = &all_output[output_start..].trim().to_owned();
-
-        let output = output_untrimmed
-            .split(' ')
-            .map(|s| s.trim_start_matches('\"'))
-            .map(|s| s.trim_end_matches('\"'))
+        let output = std::str::from_utf8(&command.stdout)?
+            .split("\" \"")
             .collect::<Vec<_>>()
             .join(" ");
 

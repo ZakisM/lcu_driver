@@ -147,14 +147,16 @@ impl LcuDriver<Uninitialized> {
 
     pub async fn connect_wait() -> Arc<LcuDriver<Initialized>> {
         loop {
-            if let Ok(lcu_driver) = LcuDriver::connect().await {
-                //Check that we can actually connect to the client
-                if lcu_driver.get_current_summoner().await.is_ok() {
-                    let pointer = Arc::new(lcu_driver);
-                    LcuDriver::start_lockfile_watching(pointer.clone());
+            match LcuDriver::connect().await {
+                Ok(lcu_driver) => {
+                    if lcu_driver.get_current_summoner().await.is_ok() {
+                        let pointer = Arc::new(lcu_driver);
+                        LcuDriver::start_lockfile_watching(pointer.clone());
 
-                    return pointer;
+                        return pointer;
+                    }
                 }
+                Err(e) => eprintln!("{e}"),
             }
 
             tokio::time::sleep(Duration::from_secs(1)).await;
